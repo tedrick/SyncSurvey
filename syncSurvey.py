@@ -87,14 +87,14 @@ def getSurveyTables(workspace, prefix=''):
 
 def getLastSynchronizationTime(workspace, tableList):
     '''Looks at the existing records in the SDE and returns the latest synchronization time'''
-    print('\t-Checking Last Sychronization')
+    arcpy.AddMessage('\t-Checking Last Sychronization')
     arcpy.env.workspace = workspace
     statTables = []
     #Dummy value to compare time
     lastSync = datetime.datetime.fromtimestamp(0)
     for table in tableList:
         #Skip if empty table (i.e., no rows)
-        print '\t\t-Checking sync on {0}'.format(table)
+        arcpy.AddMessage('\t\t-Checking sync on {0}'.format(table))
         #Just use the last part of the table name
         tableName = table.split(".")[-1]
         rowCheck = arcpy.GetCount_management(tableName)
@@ -112,14 +112,14 @@ def getLastSynchronizationTime(workspace, tableList):
     if lastSync == datetime.datetime.fromtimestamp(0):
         return None
     else:
-        print('\t\t-Last Synchornized on {0}'.format(createTimestampText(lastSync)))
+        arcpy.AddMessage('\t\t-Last Synchornized on {0}'.format(createTimestampText(lastSync)))
         return lastSync
 
 
 def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurvey.geodatabase", lastSync=None):
     '''Downloads the full replica and then process client-side'''
     # See http://resources.arcgis.com/en/help/arcgis-rest-api/#/Create_Replica/02r3000000rp000000/
-    print('\t-Getting Replica')
+    arcpy.AddMessage('\t-Getting Replica')
     createReplicaURL = '{0}/createReplica/?f=json&token={1}'.format(serviceURL, token)
     replicaParameters = {
         "geometry": "-180,-90,180,90",
@@ -158,7 +158,7 @@ def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurve
             raise Exception('took too long to make replica')
         if status["status"] == "Failed" or status["status"] == "CompletedWithErrors":
             raise Exception('Create Replica Issues: {0}'.format(status["status"]))
-        print('\t\t-Check {0}: {1}'.format(str(1001-sanityCounter), status["status"]))
+        arcpy.AddMessage('\t\t-Check {0}: {1}'.format(str(1001-sanityCounter), status["status"]))
         sanityCounter = sanityCounter - 1
         time.sleep(10)
     #Download the sqlite .geodatabase file
@@ -183,22 +183,23 @@ def filterRecords(surveyGDB, now, lastSync):
     #           after the start of the script
     #       We put in a max time to ensure consistency in operation from run to run and
     #           table to table
-    print('\t-Filtering records to new set')
+    arcpy.AddMessage('\t-Filtering records to new set')
     arcpy.env.workspace = surveyGDB
     nowText = createTimestampText(now)
     tableList = getSurveyTables(surveyGDB)
-    excludeStatement = "CreationDate > timestamp'{0}'".format(nowText)
+    dateField = arcpy.AddFieldDelimiters(surveyGDB, "CreationDate")
+    excludeStatement = "CreationDate > date '{1}'".format(dateField, nowText)
     if lastSync != None:
         lastSyncText = createTimestampText(lastSync)
-        excludeStatement = excludeStatement + " OR CreationDate <= timestamp '{0}'".format(lastSyncText)
-    print('\t\t-{0}'.format(excludeStatement))
+        excludeStatement = excludeStatement + " OR CreationDate <= date '{0}'".format(lastSyncText)
+    arcpy.AddMessage('\t\t-{0}'.format(excludeStatement))
     i = 0
     for table in tableList:
         i = i + 1
         thisName = 'filterView{0}'.format(str(i))
         dsc = arcpy.Describe(table)
-        dsc = arcpy.Describe(table)
-        if dsc.datatype == u'FeatureClass':
+        if dsc.datatype == u'FeatureClass' or dsc.datatype == u'FeatureLayer':
+            arcpy.AddMessage('\t\t{0}'.format('featureclass'))
             arcpy.MakeFeatureLayer_management(table, thisName, excludeStatement)
             arcpy.DeleteFeatures_management(thisName)
         else:
@@ -208,7 +209,7 @@ def filterRecords(surveyGDB, now, lastSync):
 
 def addTimeStamp(surveyGDB, timestamp):
     '''Disables editor tracking, adds and populates the timestamp field'''
-    print('\t-Adding Syncronization Time')
+    arcpy.AddMessage('\t-Adding Syncronization Time')
     arcpy.env.workspace = surveyGDB
     tableList = getSurveyTables(surveyGDB)
     for table in tableList:
@@ -249,22 +250,22 @@ def addKeyFields(workspace):
 
 def createTables(surveyGDB, outWorkspace, prefix):
     '''Creates the doamins, tables and relationships of the survey in the target workspace'''
-    print('\t-Creating Tables')
+    arcpy.AddMessage('\t-Creating Tables')
     arcpy.env.workspace = surveyGDB
     allTables = getSurveyTables(surveyGDB)
 
     dscW = arcpy.Describe(arcpy.env.workspace)
     #migrate the domains
-    print('\t\t-Creating Domains')
+    arcpy.AddMessage('\t\t-Creating Domains')
     for domainName in dscW.domains:
         if domainName[0:3] == 'cvd':
-            print('\t\t\t-'.format(domainName))
+            arcpy.AddMessage('\t\t\t-'.format(domainName))
             tempTable = 'in_memory\{0}'.format(domainName)
             domainTable = arcpy.DomainToTable_management(surveyGDB, domainName, tempTable,'CODE', 'DESC')
             newDomain = arcpy.TableToDomain_management(tempTable, 'CODE', 'DESC', outWorkspace, domainName, update_option='REPLACE')
             arcpy.Delete_management(tempTable)
 
-    print("\t\t-Creating Feature Classes & Tables")
+    arcpy.AddMessage("\t\t-Creating Feature Classes & Tables")
     for table in allTables:
         dsc = arcpy.Describe(table)
         newTableName = "{0}_{1}".format(prefix, table)
@@ -274,7 +275,7 @@ def createTables(surveyGDB, outWorkspace, prefix):
             newTable = arcpy.CreateFeatureclass_management(outWorkspace, newTableName, "POINT", template=templateTable, spatial_reference=dsc.spatialReference)
         else:
             newTable = arcpy.CreateTable_management(outWorkspace, newTableName, template=templateTable)
-        print("\t\t\t-Created {0}".format(newTableName))
+        arcpy.AddMessage("\t\t\t-Created {0}".format(newTableName))
 
         #Attach domains to fields
         tableFields = arcpy.ListFields(table)
@@ -283,7 +284,7 @@ def createTables(surveyGDB, outWorkspace, prefix):
                 arcpy.AssignDomainToField_management(newTable, field.name, field.domain)
         arcpy.RegisterAsVersioned_management(newTable)
 
-    print('\t\t-Creating Relationships')
+    arcpy.AddMessage('\t\t-Creating Relationships')
     #Reconnect Relationship classes, checking for attachments
     CARDINALITIES = {
     'OneToOne': "ONE_TO_ONE",
@@ -321,7 +322,7 @@ def createTables(surveyGDB, outWorkspace, prefix):
 
 def getTablesWithAttachments(workspace, prefix):
     '''Lists the tables that have attachments, so that we can seperately process the attachments during migration'''
-    print('\t-Finding Attachments')
+    arcpy.AddMessage('\t-Finding Attachments')
     originalWorkspace = arcpy.env.workspace
     arcpy.env.workspace = workspace
     dscW = arcpy.Describe(workspace)
@@ -341,7 +342,7 @@ def getTablesWithAttachments(workspace, prefix):
 
 def createFieldMap(originTable, originFieldNames, destinationFieldNames):
     '''Matches up fields between tables, even if some minor alteration (capitalization, underscores) occured during creation'''
-    print('\t\t-Field Map')
+    arcpy.AddMessage('\t\t-Field Map')
     fieldMappings = arcpy.FieldMappings()
     for field in originFieldNames:
         if field != 'SHAPE':
@@ -352,7 +353,7 @@ def createFieldMap(originTable, originFieldNames, destinationFieldNames):
                 outField = thisFieldMap.outputField
                 outField.name = field
                 thisFieldMap.outputField = outField
-                #print("\t".join([field, field]))
+                #arcpy.AddMessage("\t".join([field, field]))
             else:
                 #Use regular expression to search case insensitve and added _ to names
                 candidates = [x for i, x in enumerate(destinationFieldNames) if re.search('{0}\W*'.format(field), x, re.IGNORECASE)]
@@ -366,16 +367,14 @@ def createFieldMap(originTable, originFieldNames, destinationFieldNames):
 
 def appendTables(surveyGDB, workspace, prefix):
     '''Append the records from the survey into the destination database'''
-    print('\t-Adding records')
+    arcpy.AddMessage('\t-Adding records')
     arcpy.env.workspace = surveyGDB
     tableList = getSurveyTables(surveyGDB)
     attachmentList = getTablesWithAttachments(workspace, prefix)
 
     for table in tableList:
-        print table
         #Normalize table fields to get schemas in alignmnet- enable all editing, make nonrequired
         fields = arcpy.ListFields(table)
-        print [f.name for f in fields]
         for field in fields:
             if not field.editable:
                 field.editable = True
@@ -383,7 +382,7 @@ def appendTables(surveyGDB, workspace, prefix):
                 field.required = False
         destinationName = "{0}_{1}".format(prefix, table)
         destinationFC = os.path.join(workspace, destinationName)
-        print('\t\t-{0} > {1}'.format(table, destinationName))
+        arcpy.AddMessage('\t\t-{0} > {1}'.format(table, destinationName))
 
         #First, append the table
         #Match up the fields
@@ -391,7 +390,7 @@ def appendTables(surveyGDB, workspace, prefix):
         destFieldNames = [f.name for f in arcpy.ListFields(destinationFC)]
         fieldMap = createFieldMap(table, originFieldNames, destFieldNames)
 
-        print('\t\t-{0}'.format(table))
+        arcpy.AddMessage('\t\t-{0}'.format(table))
         arcpy.Append_management(table, destinationFC, 'NO_TEST', fieldMap)
 
         if destinationName in attachmentList:
@@ -400,7 +399,7 @@ def appendTables(surveyGDB, workspace, prefix):
 
 
 def appendAttachments(inFC, outFC, keyField='rowid', valueField = 'globalid'):
-    print('\t\t\t-Adding attachments')
+    arcpy.AddMessage('\t\t\t-Adding attachments')
     # 1) scan through both GlobalID and rowID of the old and new features and build a conversion dictionary
     GUIDFields = [keyField, valueField]
     inDict = {}
@@ -433,23 +432,23 @@ def appendAttachments(inFC, outFC, keyField='rowid', valueField = 'globalid'):
     arcpy.Delete_management(tempTable)
 
 def FAIL(sectionText, err):
-    print ('======================')
-    print ('FAIL: '.format(sectionText))
-    print ('exception:')
-    print (err)
-    print (err.args)
-    print (sys.exc_info()[0])
-    print (sys.exc_info()[2].tb_lineno)
-    print ('----------------------')
-    print ('arcpy messages:')
-    print (arcpy.GetMessages(1))
-    print (arcpy.GetMessages(2))
-    print ('======================')
+    arcpy.AddMessage ('======================')
+    arcpy.AddMessage ('FAIL: {0}'.format(sectionText))
+    arcpy.AddMessage ('exception:')
+    arcpy.AddMessage (err)
+    arcpy.AddMessage (err.args)
+    arcpy.AddMessage (sys.exc_info()[0])
+    arcpy.AddMessage (sys.exc_info()[2].tb_lineno)
+    arcpy.AddMessage ('----------------------')
+    arcpy.AddMessage ('arcpy messages:')
+    arcpy.AddMessage (arcpy.GetMessages(1))
+    arcpy.AddMessage (arcpy.GetMessages(2))
+    arcpy.AddMessage ('======================')
     return
 
-def cleanup(ops, config, now):
+def cleanup(ops, sdeConnection, prefix, now):
     if 'append' in ops.keys():
-        arcpy.env.workspace = config['sde_conn']
+        arcpy.env.workspace = sdeConnection
         nowTS = createTimestampText(now)
         i = 0
         for table in ops['append']:
@@ -467,14 +466,12 @@ def cleanup(ops, config, now):
             arcpy.Delete_management(view)
 
     if 'createTables' in ops.keys():
-        arcpy.env.workspace = config['sde_conn']
-        newFCs = arcpy.ListFeatureClasses(wild_card = "*{0}*".format(config['prefix']))
-        newTables = arcpy.ListTables(wild_card = "*{0}*".format(config['prefix']))
-        newFCs.extend(newTables)
-        for fc in newFCs:
+        arcpy.env.workspace = sdeConnection
+        tableList = getSurveyTables(sdeConnection, prefix)
+        for table in tableList:
             arcpy.Delete_management(fc)
 
-    if 'tempdir' in ops.keys():
+#    if 'tempdir' in ops.keys():
 #        shutil.rmtree(ops['tempdir'])
 
 def ConfigSectionMap(cfg, section):
@@ -499,10 +496,9 @@ def test(section):
     testConfig = ConfigSectionMap(cfg, section)
 
     testConfig['sde_conn'] = os.path.join(os.path.abspath(os.curdir), testConfig['sde_conn'])
-    process(testConfig)
+    process(testConfig['sde_conn'], testConfig['prefix'], testConfig['service_url'], testConfig['username'], testConfig['password'], testConfig['timezone'])
 
-def process(config):
-
+def process(sdeConnection, prefix, featureServiceUrl, timezone, portalUrl=None, username=None, password=None):
     '''Operations:
         1) Query Feature Service endpoint for table names & IDs
         2) Check for existing tables
@@ -512,27 +508,33 @@ def process(config):
         6) If new, create the tables
         7) Append
     '''
-    now = getUTCTimestamp(config['timezone'])
+    now = getUTCTimestamp(timezone)
     cleanupOperations = {}
     section = 'Beginning'
     try:
         section = 'Logging in to Survey'
-        arcpy.AddMessage("Logging in to get survey")
-        token = getToken(config['username'], config['password'])
-        serviceInfo = getServiceDefinition(token, config['service_url'])
+        tokenTest = arcpy.GetSigninToken()
+        token = None
+        if tokenTest == None:
+            token = getToken(username, password, portalUrl)
+        else:
+            token = tokenTest['token']
+
+        serviceInfo = getServiceDefinition(token, featureServiceUrl)
         if 'Sync' not in serviceInfo['capabilities']:
+            arcpy.AddError('Sync Capabilities not enabled')
             raise Exception('Sync Capabilities not enabled')
 
         section = 'Checking Existing Data'
-        existingTables = getSurveyTables(config['sde_conn'], config['prefix'])
+        existingTables = getSurveyTables(sdeConnection, prefix)
         lastSync = None
         if len(existingTables) > 0:
-            lastSync = getLastSynchronizationTime(config['sde_conn'], existingTables)
+            lastSync = getLastSynchronizationTime(sdeConnection, existingTables)
 
         section = 'Downloading Survey'
         tempdir = tempfile.mkdtemp()
-        cleanupOperations['tempdir'] = tempdir
-        surveyGDB = getReplica(token, config['service_url'], serviceInfo, now, outDir=tempdir, lastSync=lastSync)
+        #cleanupOperations['tempdir'] = tempdir
+        surveyGDB = getReplica(token, featureServiceUrl, serviceInfo, now, outDir=tempdir, lastSync=lastSync)
 
         section = 'Preprocess Surveys for transfer'
         filterRecords(surveyGDB, now, lastSync)
@@ -541,22 +543,32 @@ def process(config):
 
         if len(existingTables) == 0:
             section = 'Making Tables'
-            createTables(surveyGDB, config['sde_conn'], config['prefix'])
+            createTables(surveyGDB, sdeConnection, prefix)
             cleanupOperations['createTables'] = True
 
         section = 'Updating Tables'
         cleanupOperations['append'] = existingTables
-        appendTables(surveyGDB, config['sde_conn'], config['prefix'])
+        appendTables(surveyGDB, sdeConnection, prefix)
         cleanupOperations.pop('append', None)
         cleanupOperations.pop('createTables', None)
     except Exception as e:
         FAIL(section, e)
-        #clean up
     finally:
-        cleanup(cleanupOperations, config, now)
+        #clean up
+        cleanup(cleanupOperations, sdeConnection, prefix, now)
     return
 
 def main():
+    sde_conn = arcpy.GetParameterAsText(0)
+    prefix   = arcpy.GetParameterAsText(1)
+    featureService = arcpy.GetParameterAsText(2)
+    timezone = arcpy.GetParameterAsText(3)
+    portal   = arcpy.GetParameterAsText(4)
+    username = arcpy.GetParameterAsText(5)
+    password = arcpy.GetParameterAsText(6)
+    process(sde_conn, prefix, featureService, timezone, portal, username, password)
+    arcpy.SetParameterAsText(7, sde_conn)
+
     pass
 
 if __name__ == '__main__':
