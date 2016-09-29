@@ -282,7 +282,8 @@ def createTables(surveyGDB, outWorkspace, prefix):
         for field in tableFields:
             if field.domain != '':
                 arcpy.AssignDomainToField_management(newTable, field.name, field.domain)
-        arcpy.RegisterAsVersioned_management(newTable)
+        if dscW.workspaceType == "RemoteDatabase":
+            arcpy.RegisterAsVersioned_management(newTable)
 
     arcpy.AddMessage('\t\t-Creating Relationships')
     #Reconnect Relationship classes, checking for attachments
