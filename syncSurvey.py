@@ -152,8 +152,10 @@ def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurve
     while resultUrl == "":
         checkReq = urllib2.urlopen("{0}?f=json&token={1}".format(jobUrl, token))
         statusText = checkReq.read()
+        arcpy.AddMessage(statusText)
         status = json.loads(statusText)
-        resultUrl = status["resultUrl"]
+        if "resultUrl" in status.keys():
+            resultUrl = status["resultUrl"]
         if sanityCounter < 0:
             raise Exception('took too long to make replica')
         if status["status"] == "Failed" or status["status"] == "CompletedWithErrors":
