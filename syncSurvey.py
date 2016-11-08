@@ -472,7 +472,7 @@ def cleanup(ops, sdeConnection, prefix, now):
         arcpy.env.workspace = sdeConnection
         tableList = getSurveyTables(sdeConnection, prefix)
         for table in tableList:
-            arcpy.Delete_management(fc)
+            arcpy.Delete_management(table)
 
 #    if 'tempdir' in ops.keys():
 #        shutil.rmtree(ops['tempdir'])
