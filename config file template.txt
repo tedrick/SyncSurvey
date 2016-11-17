@@ -1,10 +1,11 @@
-[Example]
+;Sections are labeled by a word in square brackets
+[SECTION1]
 ; ArcGIS Online/Portal instance, username, password
 portal: https://www.arcgis.com
 username: 
 password:
 
-; service_url - The Feature Serivce URL. Ends with '/FeatureServer' (NO Number)
+; service_url - The Feature Serivce URL. Ends with '/FeatureServer' (NO NUMBERS)
 service_url: 
 
 ; sde_conn - Either a File Geodatabase OR a .sde file that connects to the destination DB
@@ -12,7 +13,9 @@ sde_conn: <The path to a .sde file that connects to the destination DB OR a File
 
 ; prefix - The tables created from the service will have the name <prefix>_<tablename>
 ;          This is to help ensure unique table names (not overwrite existing tables)
-prefix: s123 #
+prefix: s123
 
 ; timezone - Needed to compensate from UTC.  Look up at https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 timezone: US/Pacific
+
+
