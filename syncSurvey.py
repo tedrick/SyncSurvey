@@ -9,11 +9,13 @@
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
 import os, tempfile, shutil
+import zipfile
 import json, re
 import uuid
 import datetime, time, pytz
 import urllib, urllib2
 import sys
+import getpass
 
 import arcpy
 
@@ -116,7 +118,7 @@ def getLastSynchronizationTime(workspace, tableList):
         return lastSync
 
 
-def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurvey.geodatabase", lastSync=None):
+def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurvey.zip", lastSync=None):
     '''Downloads the full replica and then process client-side'''
     # See http://resources.arcgis.com/en/help/arcgis-rest-api/#/Create_Replica/02r3000000rp000000/
     arcpy.AddMessage('\t-Getting Replica')
@@ -130,10 +132,11 @@ def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurve
         "returnAttachmentsDatabyURL":False,
         "async":True,
         "syncModel":"none",
-        "dataFormat":"sqlite",
+        "dataFormat":"filegdb",
     }
-    if serviceInfo["syncCapabilities"]["supportsAttachmentsSyncDirection"] == True:
-        replicaParameters["attachmentsSyncDirection"] = "bidirectional"
+    if "syncCapabilities" in serviceInfo:
+        if serviceInfo["syncCapabilities"]["supportsAttachmentsSyncDirection"] == True:
+            replicaParameters["attachmentsSyncDirection"] = "bidirectional"
     layerList = [str(l["id"]) for l in serviceInfo["layers"]]
     tableList = [str(t["id"]) for t in serviceInfo["tables"]]
     layerList.extend(tableList)
@@ -167,16 +170,26 @@ def getReplica(token, serviceURL, serviceInfo, now, outDir=None, outDB="outSurve
     resultReq = urllib2.urlopen("{0}?token={1}".format(resultUrl, token))
     if outDir == None:
         outDir = tempfile.mkdtemp()
+    arcpy.AddMessage('\t-Temporary Directory: {0}'.format(outDir))
     outFile = os.path.join(outDir, outDB)
     with open(outFile, 'wb') as output:
         output.write(resultReq.read())
     del(output)
 
-    #transfer from sqlite to GDB
-    surveyGDB = os.path.join(outDir, 'outSurvey.gdb')
-    arcpy.CopyRuntimeGdbToFileGdb_conversion(outFile, surveyGDB)
-    del(outFile)
-    return surveyGDB
+    ## Deprecated in favor of unzipping and returning filegdb
+    ## #transfer from sqlite to GDB
+    ## surveyGDB = os.path.join(outDir, 'outSurvey.gdb')
+    ## arcpy.CopyRuntimeGdbToFileGdb_conversion(outFile, surveyGDB)
+    ## del(outFile)
+
+    surveyGDB = ''
+    with zipfile.ZipFile(outFile, 'r') as zipGDB:
+        #Get the name of the gdb directory by splitting the first part of the path
+        #of a zipped file
+        surveyGDB = zipGDB.namelist()[0].split(r'/')[0]
+        zipGDB.extractall(outDir)
+    print surveyGDB
+    return os.path.join(outDir, surveyGDB)
 
 def filterRecords(surveyGDB, now, lastSync):
     '''Filter the records to those that need to be updated'''
@@ -240,7 +253,7 @@ def addKeyFields(workspace):
         if dscRC.isAttachmentRelationship:
             originTable = dscRC.originClassNames[0]
             originFieldNames = [f.name for f in arcpy.ListFields(originTable)]
-            if 'parentrowid' in originFieldNames and 'rowid' not in originFieldNames:
+            if 'rowid' not in originFieldNames:
                 arcpy.AddField_management(originTable, 'rowid', 'GUID')
                 with arcpy.da.Editor(workspace) as edit:
                     with arcpy.da.UpdateCursor(originTable, ['rowid']) as urows:
@@ -472,7 +485,7 @@ def cleanup(ops, sdeConnection, prefix, now):
         arcpy.env.workspace = sdeConnection
         tableList = getSurveyTables(sdeConnection, prefix)
         for table in tableList:
-            arcpy.Delete_management(fc)
+            arcpy.Delete_management(table)
 
 #    if 'tempdir' in ops.keys():
 #        shutil.rmtree(ops['tempdir'])
@@ -490,16 +503,16 @@ def ConfigSectionMap(cfg, section):
             dict1[option] = None
     return dict1
 
-def test(section):
+def processConfig(configFile, section):
     import ConfigParser
-    os.chdir(r'C:\Users\jame6423\Documents\Projects\SDEmigration')
+#    os.chdir(r'C:\Users\jame6423\Documents\Projects\SDEmigration')
     cfg = ConfigParser.ConfigParser()
-    cfg.read('test.ini')
+    cfg.read(configFile)
     ## Polio Test
     testConfig = ConfigSectionMap(cfg, section)
 
-    testConfig['sde_conn'] = os.path.join(os.path.abspath(os.curdir), testConfig['sde_conn'])
-    process(testConfig['sde_conn'], testConfig['prefix'], testConfig['service_url'], testConfig['username'], testConfig['password'], testConfig['timezone'])
+#    testConfig['sde_conn'] = os.path.join(os.path.abspath(os.curdir), testConfig['sde_conn'])
+    process(testConfig['sde_conn'], testConfig['prefix'], testConfig['service_url'], testConfig['timezone'], testConfig['portal'],  testConfig['username'], testConfig['password'])
 
 def process(sdeConnection, prefix, featureServiceUrl, timezone, portalUrl=None, username=None, password=None):
     '''Operations:
@@ -563,16 +576,21 @@ def process(sdeConnection, prefix, featureServiceUrl, timezone, portalUrl=None, 
 
 def main():
     sde_conn = arcpy.GetParameterAsText(0)
-    prefix   = arcpy.GetParameterAsText(1)
-    featureService = arcpy.GetParameterAsText(2)
-    timezone = arcpy.GetParameterAsText(3)
-    portal   = arcpy.GetParameterAsText(4)
-    username = arcpy.GetParameterAsText(5)
-    password = arcpy.GetParameterAsText(6)
-    process(sde_conn, prefix, featureService, timezone, portal, username, password)
-    arcpy.SetParameterAsText(7, sde_conn)
+    #Use the keyword CONFIG in the first variable
+    if sde_conn == "CONFIG":
+        configFile = arcpy.GetParameterAsText(1)
+        section = arcpy.GetParameterAsText(2)
+        processConfig(configFile, section)
+    else:
+        prefix   = arcpy.GetParameterAsText(1)
+        featureService = arcpy.GetParameterAsText(2)
+        timezone = arcpy.GetParameterAsText(3)
+        portal   = arcpy.GetParameterAsText(4)
+        username = arcpy.GetParameterAsText(5)
+        password = arcpy.GetParameterAsText(6)
+        process(sde_conn, prefix, featureService, timezone, portal, username, password)
+        arcpy.SetParameterAsText(7, sde_conn)
 
-    pass
 
 if __name__ == '__main__':
     main()
