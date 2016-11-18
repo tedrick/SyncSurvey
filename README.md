@@ -19,5 +19,5 @@ The parameters have the following definition:
   - Portal - either 'https://www.arcgis.com' for ArcGIS Online or the Portal's url
   - Username - your username for ArcGIS Online / Portal
   - Password - your password for ArcGIS Online / Portal. If you don't supply it, you'll be prompted by the script after it starts
-- Using a config file.  The parameters above can be stored in a text file and read by the program; which can make automated syncronization jobs easier. Look at `config file template.txt` To run in this mode, use the following syntax:
+- Using a config file.  The parameters above can be stored in a text file and read by the program; which can make automated syncronization jobs easier. Look at [config file template.txt](https://github.com/tedrick/SyncSurvey/blob/master/config%20file%20template.txt) To run in this mode, use the following syntax:
 `python syncSurvey.py CONFIG <path to config file> <section name>`
