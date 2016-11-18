@@ -6,7 +6,7 @@
 #
 # Created:     15/08/2016
 # Copyright:   (c) jame6423 2016
-# Licence:     <your licence>
+# Licence:     Apache 2.0
 #-------------------------------------------------------------------------------
 import os, tempfile, shutil
 import zipfile
