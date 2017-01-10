@@ -1,11 +1,11 @@
 #-------------------------------------------------------------------------------
 # Name:        SyncSurvey
-# Purpose:     Initiate
+# Purpose:     Synchronize Online Feature Services into a file/enterprise geodatabase
 #
-# Author:      jame6423
+# Author:      James Tedrick, Esri
 #
 # Created:     15/08/2016
-# Copyright:   (c) jame6423 2016
+# Copyright:   (c) Esri 2016
 # Licence:     Apache 2.0
 #-------------------------------------------------------------------------------
 import os, tempfile, shutil
@@ -110,6 +110,8 @@ def getLastSynchronizationTime(workspace, tableList):
                 thisDate = row[0]
                 if thisDate > lastSync:
                     lastSync = thisDate
+    for s in statTables:
+        arcpy.Delete_management(s)
     #If we get no results (i.e., no tables) return None
     if lastSync == datetime.datetime.fromtimestamp(0):
         return None
@@ -323,7 +325,7 @@ def createTables(surveyGDB, outWorkspace, prefix):
             newRC = os.path.join(outWorkspace, "{0}_{1}".format(prefix, child[0]))
             relationshipType = "COMPOSITE" if dscRC.isComposite else "SIMPLE"
             fwd_label = dscRC.forwardPathLabel if dscRC.forwardPathLabel != '' else 'Repeat'
-            bck_label = dscRC.backwardPathLabel if dscRC.backwardPathLabel != '' else 'Main Form'
+            bck_label = dscRC.backwardPathLabel if dscRC.backwardPathLabel != '' else 'MainForm'
             msg_dir = dscRC.notification.upper()
             cardinality = CARDINALITIES[dscRC.cardinality]
             attributed = "ATTRIBUTED" if dscRC.isAttributed else "NONE"
